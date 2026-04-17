@@ -1,0 +1,41 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    
+    // Essencial para o TypeScript reconhecer o process.env do Node.js
+    "types": ["node"],
+
+    // Diretórios de compilação (preparando para quando criarmos o código)
+    "outDir": "./dist",
+
+    // Opções de saída
+    "sourceMap": true,
+    "declaration": true,
+    "declarationMap": true,
+
+    // Checagem de tipos estrita (Padrão Sênior)
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "strict": true,
+
+    // Interoperabilidade e sintaxe
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "verbatimModuleSyntax": false,
+    "isolatedModules": true,
+    "noUncheckedSideEffectImports": true,
+    "moduleDetection": "force",
+    
+    // Ignora a checagem de tipos dentro da pasta node_modules (acelera muito o editor)
+    "skipLibCheck": true
+  },
+  "include": [
+    "**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
+}

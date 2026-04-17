@@ -1,0 +1,39 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Enum para controlar o ciclo de vida da análise na fila
+enum AnalysisStatus {
+  PENDING     // Entrou na API, aguardando ir pra fila
+  PROCESSING  // O Worker pegou e mandou pra IA
+  COMPLETED   // IA respondeu com sucesso
+  FAILED      // Deu erro (timeout, limite de API, etc)
+}
+
+model TransactionAnalysis {
+  id              String         @id @default(uuid())
+  
+  // Dados simulados da transação financeira original
+  transactionId   String         @unique // ID gerado pelo sistema bancário original
+  userId          String         
+  amount          Decimal        @db.Decimal(10, 2)
+  merchant        String         // Nome da loja/estabelecimento
+  deviceIp        String?        
+  timestamp       DateTime       // Hora que a transação ocorreu
+
+  // Dados do processamento do nosso Motor
+  status          AnalysisStatus @default(PENDING)
+  fraudScore      Int?           // De 0 (seguro) a 100 (fraude absoluta)
+  iaReason        String?        @db.Text // Justificativa da IA
+  
+  // Rastreabilidade (Auditoria)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([status]) // Índice para facilitar a busca do Worker por itens pendentes
+  @@map("transaction_analyses") // Boa prática: nomes de tabelas no plural e snake_case no Postgres
+}
