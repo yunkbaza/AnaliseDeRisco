@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: risk-db
+    restart: always
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: risk_db
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7-alpine
+    container_name: risk-redis
+    restart: always
+    ports:
+      - "6379:6379"
+
+  api:
+    build: .
+    container_name: risk-api
+    command: npm run dev
+    ports:
+      - "3333:3333"
+    environment:
+      - DATABASE_URL=postgresql://user:password@db:5432/risk_db?schema=public
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    depends_on:
+      - db
+      - redis
+
+  worker:
+    build: .
+    container_name: risk-worker
+    command: npx tsx src/worker.ts
+    environment:
+      - DATABASE_URL=postgresql://user:password@db:5432/risk_db?schema=public
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - REDIS_HOST=redis
+    depends_on:
+      - db
+      - redis
