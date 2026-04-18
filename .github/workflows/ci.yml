@@ -1,7 +1,5 @@
 name: CI Pipeline - Motor de Risco
 
-# Quando é que este robô deve trabalhar? 
-# Sempre que alguém fizer um 'push' para a branch 'main' ou 'master'
 on:
   push:
     branches: [ "main", "master" ]
@@ -11,27 +9,61 @@ on:
 jobs:
   build-and-test:
     name: 🧪 Testes e Validação
-    runs-on: ubuntu-latest # O GitHub liga um servidor Linux novinho em folha
+    runs-on: ubuntu-latest
+
+    # 🛡️ 1. O SEGREDO: Ensinar o GitHub a ligar o Banco e o Redis temporários
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: risk_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    # 🔑 2. Variáveis de ambiente "falsas" só para a Pipeline funcionar
+    env:
+      DATABASE_URL: postgresql://user:password@localhost:5432/risk_db?schema=public
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      GEMINI_API_KEY: "chave-falsa-teste-ci"
 
     steps:
     - name: 📥 Clonar o código fonte
       uses: actions/checkout@v4
 
-    - name: ⚙️ Instalar e configurar Node.js 20
+    - name: ⚙️ Instalar Node.js 20
       uses: actions/setup-node@v4
       with:
         node-version: '20'
-        cache: 'npm' # Acelera as próximas execuções
+        cache: 'npm'
 
-    - name: 📦 Instalar dependências do projeto
+    - name: 📦 Instalar dependências
       run: npm install
 
-    - name: 🗄️ Preparar o Prisma ORM
-      run: npx prisma generate
+    - name: 🗄️ Preparar o Prisma e as Tabelas
+      run: |
+        npx prisma generate
+        npx prisma migrate deploy
 
-    - name: 🚦 Correr Testes Automatizados (Vitest)
+    - name: 🚦 Correr Testes (Vitest)
       run: npm run test
 
-    - name: 🔎 Verificar erros de tipagem (TypeScript)
-      # Isto garante que não tens erros de TS escondidos que fariam o sistema falhar em produção
+    - name: 🔎 Verificar Tipagem (TypeScript)
       run: npx tsc --noEmit
