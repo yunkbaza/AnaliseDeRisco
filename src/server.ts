@@ -3,16 +3,28 @@ import cors from 'cors';
 import { prisma } from './lib.js'; 
 import { riskAnalysisQueue, redisConnection } from './queue.js';
 import { Prisma } from '@prisma/client';
+import rateLimit from 'express-rate-limit'; // 🛡️ NOVIDADE: Importação do Rate Limit
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 
+// 🛡️ GATILHO DE SEGURANÇA: Limita a 50 requisições por minuto por IP
+const apiLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minuto
+  max: 50, 
+  message: { error: 'Too Many Requests', details: 'Limite de requisições excedido. Tente novamente em 1 minuto.' },
+  standardHeaders: true, 
+  legacyHeaders: false, 
+});
+
+// Aplica o escudo apenas nas rotas da API (o /health fica de fora para não bloquear os monitores)
+app.use('/api/', apiLimiter);
+
 /**
  * GET /health
  * Padrão Sênior: Healthcheck para orquestradores (Docker/Kubernetes).
- * Verifica se o Banco e o Redis estão respondendo antes de dar "OK".
  */
 app.get('/health', async (req, res) => {
   try {
@@ -26,7 +38,6 @@ app.get('/health', async (req, res) => {
 
 /**
  * POST /api/v1/analyze-risk
- * Recebe a transação, persiste no banco e dispara o processamento assíncrono.
  */
 app.post('/api/v1/analyze-risk', async (req, res) => {
   try {
@@ -67,12 +78,10 @@ app.post('/api/v1/analyze-risk', async (req, res) => {
 
 /**
  * GET /api/v1/analyze-risk
- * Padrão Sênior: Rota para Dashboard de Administração com Paginação.
- * Retorna as últimas análises do motor.
  */
 app.get('/api/v1/analyze-risk', async (req, res) => {
   try {
-    const limit = Number(req.query.limit) || 10; // Ex: ?limit=20
+    const limit = Number(req.query.limit) || 10;
     const analyses = await prisma.transactionAnalysis.findMany({
       take: limit,
       orderBy: { createdAt: 'desc' },
@@ -92,7 +101,6 @@ app.get('/api/v1/analyze-risk', async (req, res) => {
 
 /**
  * GET /api/v1/analyze-risk/:id
- * Consulta o veredito detalhado de uma análise específica.
  */
 app.get('/api/v1/analyze-risk/:id', async (req, res) => {
   try {
@@ -120,7 +128,6 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Motor de Risco Online na porta ${PORT}`);
 });
 
-// Padrão Sênior: Graceful Shutdown (Desliga o servidor sem quebrar as conexões ativas)
 process.on('SIGTERM', () => {
   console.log('Sinal SIGTERM recebido. Fechando servidor HTTP...');
   server.close(() => {
