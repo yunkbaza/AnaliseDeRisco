@@ -3,14 +3,15 @@ import { Worker } from 'bullmq';
 import { redisConnection } from './queue.js';
 import { prisma } from './lib.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { logger } from './logger.js'; // 🛡️ Importamos o logger
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
 
-console.log('👷 Worker de IA iniciado e conectado à fila de risco...');
+logger.info('👷 Worker de IA iniciado e conectado à fila de risco...');
 
 const worker = new Worker('RiskAnalysisQueue', async (job) => {
   const { transactionId } = job.data;
-  console.log(`\n[Job ${job.id}] 🔄 Iniciando análise da transação interna: ${transactionId}`);
+  logger.info(`[Job ${job.id}] 🔄 Iniciando análise da transação interna: ${transactionId}`);
 
   try {
     const transaction = await prisma.transactionAnalysis.update({
@@ -22,7 +23,6 @@ const worker = new Worker('RiskAnalysisQueue', async (job) => {
     let finalReason = '';
 
     try {
-      // 🟢 PLANO A: TENTA USAR A INTELIGÊNCIA ARTIFICIAL
       const model = genAI.getGenerativeModel({ 
         model: 'gemini-2.5-flash',
         generationConfig: { responseMimeType: "application/json" }
@@ -57,8 +57,7 @@ const worker = new Worker('RiskAnalysisQueue', async (job) => {
       finalReason = aiAnalysis.iaReason ?? "Justificativa não fornecida.";
 
     } catch (iaError) {
-      // 🛡️ PLANO B: FALLBACK DETERMINÍSTICO (Se a IA cair, usa regras fixas)
-      console.warn(`[Job ${job.id}] ⚠️ IA indisponível. Acionando Motor de Regras Estáticas (Fallback)...`);
+      logger.warn(`[Job ${job.id}] ⚠️ IA indisponível. Acionando Motor de Regras Estáticas (Fallback)...`);
       
       const amountNum = Number(transaction.amount);
       const isPrivateIp = transaction.deviceIp?.startsWith('192.168') || transaction.deviceIp?.startsWith('172.') || transaction.deviceIp?.startsWith('10.');
@@ -75,7 +74,6 @@ const worker = new Worker('RiskAnalysisQueue', async (job) => {
       }
     }
 
-    // Persiste o veredito final (seja do Plano A ou do Plano B)
     await prisma.transactionAnalysis.update({
       where: { id: transactionId },
       data: {
@@ -85,19 +83,17 @@ const worker = new Worker('RiskAnalysisQueue', async (job) => {
       }
     });
 
-    console.log(`[Job ${job.id}] ✅ Sucesso! Score: ${finalScore} | ${finalReason}`);
+    logger.info(`[Job ${job.id}] ✅ Sucesso! Score: ${finalScore} | ${finalReason}`);
 
-    // 🔴 GATILHO DE SEGURANÇA REATIVA
     if (finalScore >= 80) {
-      console.log(`\n🚨 [ALERTA VERMELHO] FRAUDE DETECTADA NO JOB ${job.id} 🚨`);
-      console.log(`Bloqueando transação: ${transaction.transactionId}`);
-      console.log(`Iniciando estorno de R$ ${transaction.amount} para o utilizador ${transaction.userId}...`);
-      console.log(`🛡️ Ação concluída: Conta temporariamente suspensa por segurança.\n`);
+      logger.error(`🚨 [ALERTA VERMELHO] FRAUDE DETECTADA NO JOB ${job.id} 🚨`);
+      logger.error(`Bloqueando transação: ${transaction.transactionId}`);
+      logger.error(`Iniciando estorno de R$ ${transaction.amount} para o utilizador ${transaction.userId}...`);
+      logger.error(`🛡️ Ação concluída: Conta temporariamente suspensa por segurança.`);
     }
 
   } catch (error) {
-    // Falha crítica (ex: base de dados caiu)
-    console.error(`[Job ${job.id}] ❌ Erro Crítico no processamento:`, error);
+    logger.error({ err: error }, `[Job ${job.id}] ❌ Erro Crítico no processamento`);
     await prisma.transactionAnalysis.update({
       where: { id: transactionId },
       data: { status: 'FAILED' }
@@ -111,7 +107,7 @@ const worker = new Worker('RiskAnalysisQueue', async (job) => {
 });
 
 process.on('SIGINT', async () => {
-  console.log('Desligando o Worker de forma segura...');
+  logger.info('Desligando o Worker de forma segura...');
   await worker.close();
   process.exit(0);
 });
