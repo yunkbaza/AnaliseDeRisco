@@ -1,0 +1,37 @@
+name: CI Pipeline - Motor de Risco
+
+# Quando é que este robô deve trabalhar? 
+# Sempre que alguém fizer um 'push' para a branch 'main' ou 'master'
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  build-and-test:
+    name: 🧪 Testes e Validação
+    runs-on: ubuntu-latest # O GitHub liga um servidor Linux novinho em folha
+
+    steps:
+    - name: 📥 Clonar o código fonte
+      uses: actions/checkout@v4
+
+    - name: ⚙️ Instalar e configurar Node.js 20
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm' # Acelera as próximas execuções
+
+    - name: 📦 Instalar dependências do projeto
+      run: npm install
+
+    - name: 🗄️ Preparar o Prisma ORM
+      run: npx prisma generate
+
+    - name: 🚦 Correr Testes Automatizados (Vitest)
+      run: npm run test
+
+    - name: 🔎 Verificar erros de tipagem (TypeScript)
+      # Isto garante que não tens erros de TS escondidos que fariam o sistema falhar em produção
+      run: npx tsc --noEmit
